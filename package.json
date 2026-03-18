@@ -1,5 +1,5 @@
 {
-  "name": "@eucli/eucli-aitoolcall-sdk",
+  "name": "@noelle-silva/eucli-aitoolcall-sdk",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
