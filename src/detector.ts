@@ -55,20 +55,17 @@ export class Detector {
     const blockEnd = endIdx + ToolRequestEnd.length;
     const rawBlock = text.slice(this.blockStart, blockEnd);
 
-    let calls;
-    try {
-      calls = parseToolRequest(rawBlock);
-    } catch {
-      this.reset();
-      return { flush: text };
-    }
-
     const result: DetectResult = {
       found: true,
       content: text.slice(0, this.blockStart),
       raw_block: rawBlock,
-      calls,
     };
+
+    try {
+      result.calls = parseToolRequest(rawBlock);
+    } catch (error) {
+      result.parse_error = error instanceof Error ? error.message : String(error);
+    }
 
     this.reset();
     return { flush: "", result };
@@ -83,12 +80,13 @@ export function detectInText(text: string): DetectResult {
   if (endIdx === -1) return { found: false, content: text };
 
   const rawBlock = text.slice(startIdx, endIdx + ToolRequestEnd.length);
+  const result: DetectResult = { found: true, content: text.slice(0, startIdx), raw_block: rawBlock };
   try {
-    const calls = parseToolRequest(rawBlock);
-    return { found: true, content: text.slice(0, startIdx), raw_block: rawBlock, calls };
-  } catch {
-    return { found: false, content: text };
+    result.calls = parseToolRequest(rawBlock);
+  } catch (error) {
+    result.parse_error = error instanceof Error ? error.message : String(error);
   }
+  return result;
 }
 
 function getSafeFlush(text: string, marker: string): string {

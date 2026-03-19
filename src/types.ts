@@ -27,6 +27,7 @@ export type DetectResult = {
   content: string;
   raw_block?: string;
   calls?: ToolCall[];
+  parse_error?: string;
 };
 
 export type ExecuteOptions = {

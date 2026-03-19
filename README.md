@@ -30,7 +30,8 @@ const r = detectInText(aiOutputText);
 if (r.found) {
   // r.content: 工具块之前的普通文本（可展示）
   // r.raw_block: 完整 TOOL_REQUEST 块（可展示）
-  // r.calls: 解析出的 calls（用于执行）
+  // r.calls: 解析成功时可直接执行
+  // r.parse_error: 解析失败原因；但 found 依然表示“完整外层块已命中”
 }
 ```
 
@@ -42,7 +43,8 @@ import { Detector } from "@noelle-silva/eucli-aitoolcall-sdk";
 const d = new Detector();
 const { flush, result } = d.feedChunk(chunk);
 // flush: 当前可以安全输出给用户的文本片段
-// result: 一旦检测到完整 TOOL_REQUEST，就会返回（包含 calls + raw_block）
+// result: 一旦检测到完整 TOOL_REQUEST 外层块，就会返回
+//         之后应立即截断后续模型输出；是否能 parse 出 calls 是下一阶段问题
 ```
 
 ### 3) 执行工具 + 生成回注块
@@ -64,3 +66,4 @@ const toolResponseBlock = formatToolResponse(results);
 
 - 模型通过系统提示词被要求严格输出本体系的文本块协议（`TOOL_REQUEST / TOOL_RESPONSE`）。
 - `CALL-1..N` 与 `RESULT-1..N` 采用顺序关联，结果顺序必须与请求顺序一致。
+- `found` 只表示命中完整 `TOOL_REQUEST` 外层块，不表示块内解析一定成功。
