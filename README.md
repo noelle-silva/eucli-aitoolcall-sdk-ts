@@ -21,44 +21,54 @@ npm i @noelle-silva/eucli-aitoolcall-sdk
 
 ## 使用
 
-### 1) 非流式：一次性检测
+### 1) 非流式：一次性检测（只检测完整外层块，便于你自行决定是否截断）
 
 ```ts
-import { detectInText } from "@noelle-silva/eucli-aitoolcall-sdk";
+import { detectToolRequestBlock } from "@noelle-silva/eucli-aitoolcall-sdk";
 
-const r = detectInText(aiOutputText);
-if (r.found) {
-  // r.content: 工具块之前的普通文本（可展示）
-  // r.raw_block: 完整 TOOL_REQUEST 块（可展示）
-  // r.calls: 解析成功时可直接执行
-  // r.parse_error: 解析失败原因；但 found 依然表示“完整外层块已命中”
+const r = detectToolRequestBlock(aiOutputText);
+if (r.status === "complete") {
+  // r.prefixText: 工具块之前的普通文本（可展示）
+  // r.blockText: 完整 TOOL_REQUEST 块
+  // r.keptText: prefix + block（用于截断）
 }
 ```
 
 ### 2) 流式：增量检测
 
 ```ts
-import { Detector } from "@noelle-silva/eucli-aitoolcall-sdk";
+import { createToolRequestStreamTruncator } from "@noelle-silva/eucli-aitoolcall-sdk";
 
-const d = new Detector();
-const { flush, result } = d.feedChunk(chunk);
-// flush: 当前可以安全输出给用户的文本片段
-// result: 一旦检测到完整 TOOL_REQUEST 外层块，就会返回
-//         之后应立即截断后续模型输出；是否能 parse 出 calls 是下一阶段问题
+const t = createToolRequestStreamTruncator("");
+const r = t.appendDelta(chunk);
+// r.text: 当前累计文本（当命中完整 TOOL_REQUEST 外层块后，会自动截断在块闭合处）
+// r.toolRequestCompleted: 是否已完成并截断
 ```
 
 ### 3) 执行工具 + 生成回注块
 
 ```ts
-import { executeCalls, formatToolResponse } from "@noelle-silva/eucli-aitoolcall-sdk";
+import {
+  executeToolCallsOnServer,
+  mapParsedCallsToServerCalls,
+  parseToolRequestCalls,
+  formatToolResponseBlock,
+} from "@noelle-silva/eucli-aitoolcall-sdk";
 
-const results = await executeCalls(
-  { base_url: "http://localhost:9083", token: process.env.TOOL_CALL_SERVER_TOKEN },
-  calls,
-  { session_id: "optional", provider_name: "optional", timeout_ms: 30_000 },
-);
+const parsed = parseToolRequestCalls(aiOutputText);
+if (!parsed.ok) throw new Error(parsed.error);
 
-const toolResponseBlock = formatToolResponse(results);
+const resp = await executeToolCallsOnServer({
+  request: async ({ method, url, headers, body }) => {
+    const r = await fetch(url, { method, headers, body });
+    return { status: r.status, body: await r.text() };
+  },
+  server: { baseUrl: "http://localhost:9083", token: process.env.TOOL_CALL_SERVER_TOKEN },
+  body: { timeout_ms: 30_000, calls: mapParsedCallsToServerCalls(parsed.calls) },
+});
+
+const results = resp.json?.results ?? [];
+const toolResponseBlock = formatToolResponseBlock(results);
 // 把 toolResponseBlock 追加进对话上下文后，再发起下一轮模型调用
 ```
 
